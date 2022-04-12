@@ -121,6 +121,7 @@ class LastTrCNN(nn.Module):
 class TRUNet(nn.Module):
     def __init__(self):
         super(TRUNet, self).__init__()
+        
         self.down1 = StandardConv1d(4,64,5,2)
         self.down2 = DepthwiseSeparableConv1d(64, 128, 3, 1)
         self.down3 = DepthwiseSeparableConv1d(128, 128, 5, 2)
@@ -138,12 +139,14 @@ class TRUNet(nn.Module):
   
 
     def forward(self, x):
+
         x1 = self.down1(x)
         x2 = self.down2(x1)
         x3 = self.down3(x2)
         x4 = self.down4(x3)
         x5 = self.down5(x4)
         x6 = self.down6(x5)
+
         x7 = x6.transpose(1,2)
         x8 = self.FGRU(x7)
         x9 = x8.transpose(1,2)
