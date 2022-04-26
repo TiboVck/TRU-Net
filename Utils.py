@@ -21,3 +21,8 @@ def sigma(psi_ztf):
     sigma = tf.concat([sigma_d,sigma_id,sigma_n,sigma_in],axis=2)
     print(tf.shape(sigma))
     return tf.transpose(sigma,perm=[2,0,1])
+
+
+def calcul_theta(mask_tf,mask_tfi):
+
+    return tf.divide(1+tf.pow(mask_tf,2)+tf.pow(mask_tfi,2),tf.multiply(2,mask_tf))

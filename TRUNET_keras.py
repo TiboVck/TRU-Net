@@ -1,8 +1,10 @@
+from locale import ABDAY_1
 import tensorflow as tf
 import keras
 import keras.layers as layers
 import keras.activations as activations
 import numpy as np
+import tensorflow_probability as tfp
 
 import Blocks as bl
 import Utils as ut
@@ -42,6 +44,9 @@ class TRU_Net(tf.keras.Model):
         #self.trcnn_1d_block6 = bl.TrCNN_Block(10,5,2)
         self.psi_block_ztf = bl.Last_TrCNN_Block(5,5,2)
         self.psi_block_beta  = bl.TrCNN_Block(5,5,2)
+
+        #Additional layer for ksi
+        self.gumbel_sample = layers.Dense(1,use_bias=False)
 
 
 
@@ -102,33 +107,58 @@ class TRU_Net(tf.keras.Model):
         out5_dec = self.trcnn_1d_block5(in5_dec)
         print(np.shape(out5_dec))
 
+        #Last layer of the decoder
         phi = tf.concat([out1_enc,out5_dec],axis=-1)
         z_tf = self.psi_block_ztf(phi)
         print(np.shape(z_tf))
 
+        #Post-processing
+
+        #Calcul sigma(ztf)
         sigma_tf = ut.sigma(z_tf[:,:,:4])
 
         #psi_beta_tf = self.psi_block_beta(phi)
         #print(np.shape(beta_tf))
         
+        #Calcul BetaTF
         beta_tf = ut.calcul_beta(z_tf[:,:,4])
         print(np.shape(beta_tf))
-
+            #calcul des upperbound de clipping pour Beta
         clip_d = tf.divide(1, tf.abs(sigma_tf[0]-sigma_tf[1]))
         
         clip_n = tf.divide(1, tf.abs(sigma_tf[2]-sigma_tf[3]))
 
         beta_tf_clip_d = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_d)
         beta_tf_clip_n = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_n)
+
         
-
-
+        #Calcul des masques (modules)
         mask_tfd = tf.multiply(beta_tf_clip_d, sigma_tf[0])
         mask_tfid = tf.multiply(beta_tf_clip_d, sigma_tf[1])
         mask_tfn = tf.multiply(beta_tf_clip_n, sigma_tf[2])
         mask_tfin = tf.multiply(beta_tf_clip_n, sigma_tf[3])
 
+        #Calcul des phases des masques 
+        alpha_tf1 = z_tf[:,:,5]
+        alpha_tfm1 = z_tf[:,:,6]
+        #first, delta theta
+        delta_theta_d = ut.calcul_theta(mask_tfd,mask_tfid)
+        delta_theta_n = ut.calcul_theta(mask_tfn,mask_tfin)  
 
+        #ensuite, calcul exp(j*theta)
+        #d'abord calcul des estimations ksi=+/-1
+
+        g1 = tfp.distributions.Gumbel(loc=0., scale=1.)
+        gm1 = tfp.distributions.Gumbel(loc=0., scale=1.)
+        #MODIFIE dimension des samples gumbel
+        a1 = self.gumbel_sample(tf.math.log(alpha_tf1)+g1)
+        am1 = self.gumbel_sample(tf.math.log(alpha_tfm1)+gm1)
+        y1 = tf.divide(a1,a1+am1)
+        ym1 = 1-y1
+
+
+        #version smooth
+        e_jtheta = tf.cos(tf.multiply(y1-ym1))
         
         return mask_tfd
 
