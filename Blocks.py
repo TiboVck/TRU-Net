@@ -186,3 +186,39 @@ class TrCNN_Block(tf.keras.Model):
         output = self.norm2(self.relu2(output))
 
         return output
+
+class Last_TrCNN_Block(tf.keras.Model):
+
+    def __init__(self,out_channels, kernel, stride):
+
+
+        super().__init__()
+
+        self.conv1d_ptwise = layers.Conv1D(64,1)
+        
+        self.norm1 = tf.keras.layers.BatchNormalization()
+        self.relu1 = layers.Activation(activations.relu)
+
+        self.TransposeConv = layers.Conv1DTranspose(out_channels,kernel, stride,padding='same')
+    
+       
+  
+
+
+    def call (self, x):
+        
+        print(np.shape(x))
+
+
+        output  = self.conv1d_ptwise(x)
+        
+        
+        
+        output = self.relu1(self.norm1(output))
+        print(np.shape(output))
+        output  = self.TransposeConv(output)
+
+
+        print(np.shape(output))
+       
+        return output

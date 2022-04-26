@@ -5,6 +5,7 @@ import keras.activations as activations
 import numpy as np
 
 import Blocks as bl
+import Utils as ut
 
 
 class TRU_Net(tf.keras.Model):
@@ -38,7 +39,9 @@ class TRU_Net(tf.keras.Model):
         self.trcnn_1d_block3 = bl.TrCNN_Block(64,3,1)
         self.trcnn_1d_block4 = bl.TrCNN_Block(64,5,2)
         self.trcnn_1d_block5 = bl.TrCNN_Block(64,3,1)
-        self.trcnn_1d_block6 = bl.TrCNN_Block(10,5,2)
+        #self.trcnn_1d_block6 = bl.TrCNN_Block(10,5,2)
+        self.psi_block_ztf = bl.Last_TrCNN_Block(5,5,2)
+        self.psi_block_beta  = bl.TrCNN_Block(5,5,2)
 
 
 
@@ -99,21 +102,43 @@ class TRU_Net(tf.keras.Model):
         out5_dec = self.trcnn_1d_block5(in5_dec)
         print(np.shape(out5_dec))
 
-        in6_dec = tf.concat([out1_enc,out5_dec],axis=-1)
-        out6_dec = self.trcnn_1d_block6(in6_dec)
-        print(np.shape(out6_dec))
+        phi = tf.concat([out1_enc,out5_dec],axis=-1)
+        z_tf = self.psi_block_ztf(phi)
+        print(np.shape(z_tf))
+
+        sigma_tf = ut.sigma(z_tf[:,:,:4])
+
+        #psi_beta_tf = self.psi_block_beta(phi)
+        #print(np.shape(beta_tf))
+        
+        beta_tf = ut.calcul_beta(z_tf[:,:,4])
+        print(np.shape(beta_tf))
+
+        clip_d = tf.divide(1, tf.abs(sigma_tf[0]-sigma_tf[1]))
+        
+        clip_n = tf.divide(1, tf.abs(sigma_tf[2]-sigma_tf[3]))
+
+        beta_tf_clip_d = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_d)
+        beta_tf_clip_n = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_n)
+        
+
+
+        mask_tfd = tf.multiply(beta_tf_clip_d, sigma_tf[0])
+        mask_tfid = tf.multiply(beta_tf_clip_d, sigma_tf[1])
+        mask_tfn = tf.multiply(beta_tf_clip_n, sigma_tf[2])
+        mask_tfin = tf.multiply(beta_tf_clip_n, sigma_tf[3])
 
 
         
-        return out6_dec
+        return mask_tfd
 
 
 
 if __name__=='__main__':
     
-    TRU = TRU_Net(2)
+    TRU = TRU_Net(4)
     
-    x = tf.constant(np.random.rand(686,256,2))
+    x = tf.constant(np.random.rand(1,256,4))
     print("input_shape:",tf.shape(x))
     y = TRU(x)
 
