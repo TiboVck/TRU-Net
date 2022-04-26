@@ -4,6 +4,9 @@ import keras.layers as layers
 import keras.activations as activations
 import numpy as np
 
+
+# 1D-CNN Blocks for the encoder
+ 
 class DepthwiseSeparableConv1d(tf.keras.Model):
     def __init__(self, in_channels, out_channels, kernel_size, stride):
 
@@ -68,55 +71,118 @@ class FirstBlock_DSConv1d(tf.keras.Model):
 
         return y
 
+# FGRU block, along frequency axis
 
+class FGRU_Block(tf.keras.Model):
 
-
-
-class Encoder_TRU_Net(tf.keras.Model):
-
-    def __init__(self, channels_in):
+    def __init__(self,out_channels):
 
 
         super().__init__()
 
+        gru = layers.GRU(64,return_sequences=True)
+
+        self.gru_layer = layers.Bidirectional(gru,merge_mode="sum")
         
-
-
-
-        self.cnn_1d_block1 = FirstBlock_DSConv1d(channels_in,64,5,2)
-        self.cnn_1d_block2 = DepthwiseSeparableConv1d(64,128,3,1)
-        self.cnn_1d_block3 = DepthwiseSeparableConv1d(128,128,5,2)
-        self.cnn_1d_block4 = DepthwiseSeparableConv1d(128,128,3,1)
-        self.cnn_1d_block5 = DepthwiseSeparableConv1d(128,128,5,2)
-        self.cnn_1d_block6 = DepthwiseSeparableConv1d(128,128,3,2)
-        
-        self.faux_layer = layers.Conv1D(257,17)
-
         self.norm = tf.keras.layers.BatchNormalization()
+        self.relu = layers.Activation(activations.relu)
+
+        self.conv1d_ptwise = layers.Conv1D(out_channels,1)
+    
+
+  
 
 
     def call (self, x):
-
-        print(np.shape(x))
         
-        x = self.cnn_1d_block1(x)
-        print(np.shape(x))
-        x = self.cnn_1d_block2(x)
-        print(np.shape(x))
-        x = self.cnn_1d_block3(x)
-        print(np.shape(x))
-        x = self.cnn_1d_block4(x)
-        print(np.shape(x))
-        x = self.cnn_1d_block5(x)
-        print(np.shape(x))
-        x = self.cnn_1d_block6(x)
-        print(np.shape(x))
-        x = self.faux_layer(x)
-        print(np.shape(x))
-        x = tf.transpose(x,[1,0,2])
-        print(np.shape(x))
-        out = x[0]
+        #print(np.shape(x))
 
+
+        output  = self.gru_layer(x)
+        #print(np.shape(output))
+        #out=tf.transpose(output, perm=[0,2,1])
+        output = self.conv1d_ptwise(output)
+        
+        #print(np.shape(output))
+        output = self.norm(self.relu(output))
+
+        return output
+
+# TGRU block, along time axis
+
+class TGRU_Block(tf.keras.Model):
+
+    def __init__(self,out_channels):
+
+
+        super().__init__()
+
+        self.gru = layers.GRU(128,return_sequences=True)
 
         
-        return out
+        
+        self.norm = tf.keras.layers.BatchNormalization()
+        self.relu = layers.Activation(activations.relu)
+
+        self.conv1d_ptwise = layers.Conv1D(out_channels,1)
+        
+
+        
+
+
+    def call (self, x):
+        
+        #print(np.shape(x))
+
+
+        output = self.gru(x)
+        
+        # print(np.shape(output))
+        
+        output = self.conv1d_ptwise(output)
+        
+
+        # print(np.shape(output))
+        output = self.norm(self.relu(output))
+
+        return output
+
+# Tr-CNN Blocks for the decoder
+
+class TrCNN_Block(tf.keras.Model):
+
+    def __init__(self,out_channels, kernel, stride):
+
+
+        super().__init__()
+
+        self.conv1d_ptwise = layers.Conv1D(64,1)
+        
+        self.norm1 = tf.keras.layers.BatchNormalization()
+        self.relu1 = layers.Activation(activations.relu)
+
+        self.TransposeConv = layers.Conv1DTranspose(out_channels,kernel, stride,padding='same')
+    
+        self.norm2 = tf.keras.layers.BatchNormalization()
+        self.relu2 = layers.Activation(activations.relu)
+  
+
+
+    def call (self, x):
+        
+        print(np.shape(x))
+
+
+        output  = self.conv1d_ptwise(x)
+        
+        
+        
+        output = self.relu1(self.norm1(output))
+        print(np.shape(output))
+        output  = self.TransposeConv(output)
+
+
+        print(np.shape(output))
+        output = self.norm2(self.relu2(output))
+
+        return output
