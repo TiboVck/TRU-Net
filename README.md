@@ -1,16 +1,14 @@
 # TRU-Net
 
-Décorticage et implémentation du TRU-Net porpososé dans une optique de denoising/dereverberation d'un signal audio bruité. 
-
--> Essentiel du network décortiqué
-
-À faire le 12/04/2022 :
+Implémentation du TRU-Net porpososé dans une optique de denoising/dereverberation d'un signal audio bruité. 
 
 
--Slide sur la loss function, ce que cela signifie sur le preprocessing des données
 
--Récapitulatif des opérations post-network, explication et ajout sur le diagramme
+À faire le 27/04/2022 :
 
--Diagramme decoder
 
--Décorticage du preprocessing PCEN 
+-Regarder globel softmax
+
+-Comprendre output à 5 ou 10 channel?
+
+-Preprocessing/fit d'une partie du réseau
