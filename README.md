@@ -4,11 +4,11 @@ Implémentation du TRU-Net porpososé dans une optique de denoising/dereverberat
 
 
 
-À faire le 27/04/2022 :
+À faire le 03/05/2022 :
 
 
--Regarder globel softmax
+-Regarder article globel-softmax
 
 -Comprendre output à 5 ou 10 channel?
 
--Preprocessing/fit d'une partie du réseau
+-Essayer de lancer le réseau le plus imple de rt_separation et décortiquer le code -> prendre des notes pour construction d'un fichier similaire tru-net

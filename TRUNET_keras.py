@@ -12,6 +12,37 @@ import Utils as ut
 
 class TRU_Net(tf.keras.Model):
 
+'''
+
+Architecture globale du TRU-Net.
+
+Plusieurs variantes :
+
+1) 2 channels en entrée : logmel spectrogram, et PCEN spectrogram
+En sortie : module du mask dans l'espace temps-fréquence, on prend la phase de l'entrée.
+Le module du mask est estimé avec beta_tf et les deux z_tfn. 
+Loss uni-échelle que sur le module.
+
+2) 2 channels en entrée : logmel spectrogram, et PCEN spectrogram
+En sortie : module du mask dans l'espace temps-fréquence, on prend la phase de l'entrée.
+Le module du mask est estimé avec beta_tf et les deux z_tfn. 
+Loss multi-échelle que sur le module.
+
+3) 2 channels en entrée : logmel spectrogram, et PCEN spectrogram
+En sortie : les modules des 2 masks dans l'espace temps-fréquence, on prend la phase de l'entrée.
+Les modules des mask sont estimés avec beta_tf, les deux z_tfn, les deux z_tfr.
+Loss multi-échelle que sur le module.
+
+4) 2 channels en entrée : logmel spectrogram, le PCEN spectrogram, les parties réelles et imaginaires des phases du logmel spectrogram.
+En sortie : les modules des 3 masks dans l'espace temps-fréquence.
+Le modules des masks sont estimés avec beta_tf, les deux z_tfn, les deux z_tfr. Les phases avec ksi_tf.
+Loss multi-échelle que sur le module et sur le signal.
+
+
+
+'''
+
+
     def __init__(self, channels_in):
 
 
@@ -19,17 +50,16 @@ class TRU_Net(tf.keras.Model):
 
         
 
-        #Encoder part
-
+#------------Encoder part----------------------------------------------------------------
         self.trunet_encoder = bl.TRUNet_Encoder(channels_in)
 
-        #FGRU Layer
+#------------FGRU Layer--------------------------------------------------------------------
         self.fgru_layer = bl.FGRU_Block(64)
 
-        #TGRU Layer
+#------------TGRU Layer--------------------------------------------------------------------------------
         self.tgru_layer = bl.TGRU_Block(64)
 
-        #Decoder part
+#------------Decoder part------------------------------------------------------------------
         self.trunet_decoder= bl.TRUNet_Decoder(64)
         
 #------------Last Layer-------------------------------------------------------------------
@@ -100,6 +130,8 @@ class TRU_Net(tf.keras.Model):
         #Calcul des phases des masques 
         alpha_tf1 = z_tf[:,:,5]
         alpha_tfm1 = z_tf[:,:,6]
+
+
         #first, delta theta
         delta_theta_d = ut.calcul_theta(mask_tfd,mask_tfid)
         delta_theta_n = ut.calcul_theta(mask_tfn,mask_tfin)  
