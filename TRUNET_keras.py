@@ -33,10 +33,21 @@ En sortie : les modules des 2 masks dans l'espace temps-fréquence, on prend la 
 Les modules des mask sont estimés avec beta_tf, les deux z_tfn, les deux z_tfr.
 Loss multi-échelle que sur le module.
 
-4) 2 channels en entrée : logmel spectrogram, le PCEN spectrogram, les parties réelles et imaginaires des phases du logmel spectrogram.
+4) 4 channels en entrée : logmel spectrogram, le PCEN spectrogram, les parties réelles et imaginaires des phases de la phase démodulé : https://www.zhinst.com/europe/en/resources/principles-of-lock-in-detection.
 En sortie : les modules des 3 masks dans l'espace temps-fréquence.
 Le modules des masks sont estimés avec beta_tf, les deux z_tfn, les deux z_tfr. Les phases avec ksi_tf.
 Loss multi-échelle que sur le module et sur le signal.
+
+Pour ksi: SOIT ON APPREND SEUELEMENT LES PROBAS DE +1 ET -1, SOIT ON APPREND ÉGALEMENT LA TEMPÉRATURE DE L'ESTIMATEUR
+
+Pour estimer on fait un argmax mais on back propage grâce à la fonction y
+
+Test de la dérevrberation : 
+-wham! dataset 
+https://wham.whisper.ai
+
+-CHiME2 test set.
+https://catalog.ldc.upenn.edu/LDC2017S10.
 
 
 
