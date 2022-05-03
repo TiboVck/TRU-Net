@@ -12,7 +12,7 @@ import Blocks as bl
 import Utils as ut
 
 
-class TRU_Net(tf.keras.Model):
+class TRU_Net_learn_temp(tf.keras.Model):
 
 '''
 
@@ -62,13 +62,13 @@ input size : 19624192 x 80
         super().__init__()
 #------------Parameters-------------------------------------------------------------------
         self.dist = tfd.Gumbel(loc=0., scale=3.)
-#------------Encoder part----------------------------------------------------------------
+#------------Encoder part-----------------------------------------------------------------
         self.trunet_encoder = bl.TRUNet_Encoder(channels_in)
 
 #------------FGRU Layer--------------------------------------------------------------------
         self.fgru_layer = bl.FGRU_Block(64)
 
-#------------TGRU Layer--------------------------------------------------------------------------------
+#------------TGRU Layer--------------------------------------------------------------------
         self.tgru_layer = bl.TGRU_Block(64)
 
 #------------Decoder part------------------------------------------------------------------
@@ -84,7 +84,11 @@ input size : 19624192 x 80
 #------------Additional layer for ksi------------------------------------------------------
         self.learn_temp = layers.Dense(1,use_bias=False)
 
+#------------Post-processing---------------------------------------------------------------
         
+        self.norm_cosinus = tf.keras.layers.BatchNormalization()
+
+
 
 
     def call (self, input):
@@ -154,29 +158,42 @@ input size : 19624192 x 80
         alpha_tf_plus1 = tf.math.exp(arg_exp_plus1)
         alpha_tf_moins1 = tf.math.exp(arg_exp_moins1)
         ksi_norm = alpha_tf_moins1 + alpha_tf_plus1
-
-        
-
-
+        y_plus1 = tf.divide(alpha_tf_plus1,alpha_tf_plus1+alpha_tf_moins1)
+        ksi_smooth = tf.multiply(2,y_plus1) - tf.one_hot(tf.shape(y_plus1))
 
         #first, delta theta
-        delta_theta_d = ut.calcul_theta(mask_tfd,mask_tfid)
-        delta_theta_n = ut.calcul_theta(mask_tfn,mask_tfin)  
+        cos_delta_theta_d = self.norm_cosinus(ut.calcul_theta(mask_tfd,mask_tfid))  
+        cos_delta_theta_id = self.norm_cosinus(ut.calcul_theta(mask_tfid,mask_tfd))  
+        cos_delta_theta_n = self.norm_cosinus(ut.calcul_theta(mask_tfn,mask_tfin))  
+        cos_delta_theta_in = self.norm_cosinus(ut.calcul_theta(mask_tfin,mask_tfn))  
 
-        #ensuite, calcul exp(j*theta)
+        delta_theta_d = tf.math.acos(cos_delta_theta_d)
+        delta_theta_id = tf.math.acos(cos_delta_theta_id)
+        delta_theta_n = tf.math.acos(cos_delta_theta_n)
+        delta_theta_in = tf.math.acos(cos_delta_theta_in)
+
+
+        #ensuite, calcul exp(j*theta) 
         #d'abord calcul des estimations ksi=+/-1
 
-        g1 = tfp.distributions.Gumbel(loc=0., scale=1.)
-        gm1 = tfp.distributions.Gumbel(loc=0., scale=1.)
-        #MODIFIE dimension des samples gumbel
-        a1 = self.gumbel_sample(tf.math.log(alpha_tf1)+g1)
-        am1 = self.gumbel_sample(tf.math.log(alpha_tfm1)+gm1)
-        y1 = tf.divide(a1,a1+am1)
-        ym1 = 1-y1
+        approx_theta_d = tf.multiply(ksi_smooth, delta_theta_d)
+        approx_theta_id = tf.multiply(ksi_smooth, delta_theta_id)
+        approx_theta_n = tf.multiply(ksi_smooth, delta_theta_n)
+        approx_theta_in = tf.multiply(ksi_smooth, delta_theta_in)
+
+        #Version smooth
+        exp_jtheta_d = tf.math.cos(approx_theta_d) + tf.multiply(1j,tf.math.sin(approx_theta_d))
+        exp_jtheta_id = tf.math.cos(approx_theta_id) + tf.multiply(1j,tf.math.sin(approx_theta_id))
+        exp_jtheta_n = tf.math.cos(approx_theta_n) + tf.multiply(1j,tf.math.sin(approx_theta_n))
+        exp_jtheta_in = tf.math.cos(approx_theta_n) + tf.multiply(1j,tf.math.sin(approx_theta_in))
 
 
-        #version smooth
-        e_jtheta = tf.cos(tf.multiply(y1-ym1))
+        #Reconstruction stft pour loss signal
+        STFT_d = tf.multiply(mask_tfd,exp_jtheta_d)
+        STFT_id = tf.multiply(mask_tfid,exp_jtheta_id)
+        STFT_n = tf.multiply(mask_tfn,exp_jtheta_n)
+        STFT_in = tf.multiply(mask_tfin,exp_jtheta_in)
+        STFT_r =  STFT_in - STFT_d
         
         return mask_tfd
 

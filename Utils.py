@@ -25,8 +25,10 @@ def sigma(psi_ztf):
 
 def calcul_theta(mask_tf,mask_tfi):
 
-    return tf.divide(1+tf.pow(mask_tf,2)+tf.pow(mask_tfi,2),tf.multiply(2,mask_tf))
+    return tf.divide(1+tf.pow(mask_tf,2)-tf.pow(mask_tfi,2),tf.multiply(2,mask_tf))
 
 
-def gumbel_softmax(pi_tf, g):
+
+
+
 
