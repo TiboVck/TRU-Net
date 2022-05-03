@@ -187,21 +187,19 @@ class TrCNN_Block(tf.keras.Model):
 
         return output
 
-class Last_TrCNN_Block(tf.keras.Model):
+class Last_Blocks(tf.keras.Model):
 
     def __init__(self,out_channels, kernel, stride):
 
 
         super().__init__()
 
-        self.conv1d_ptwise = layers.Conv1D(64,1)
+        self.conv1d = layers.Conv1D(out_channels,kernel,stride)
         
-        self.norm1 = tf.keras.layers.BatchNormalization()
-        self.relu1 = layers.Activation(activations.relu)
+        self.norm = tf.keras.layers.BatchNormalization()
+        self.relu = layers.Activation(activations.relu)
 
-        self.TransposeConv = layers.Conv1DTranspose(out_channels,kernel, stride,padding='same')
-    
-       
+  
   
 
 
@@ -210,15 +208,10 @@ class Last_TrCNN_Block(tf.keras.Model):
         print(np.shape(x))
 
 
-        output  = self.conv1d_ptwise(x)
-        
-        
+        output  = self.conv1d(x)
         
         output = self.relu1(self.norm1(output))
-        print(np.shape(output))
-        output  = self.TransposeConv(output)
-
-
+        
         print(np.shape(output))
        
         return output
@@ -282,9 +275,10 @@ class TRUNet_Decoder(tf.keras.Model):
         self.trcnn_1d_block3 = TrCNN_Block(64,3,1)
         self.trcnn_1d_block4 = TrCNN_Block(64,5,2)
         self.trcnn_1d_block5 = TrCNN_Block(64,3,1)
+        self.trcnn_1d_block6 = TrCNN_Block(10,5,2)
 
 
-    def call (self, out_tgru, out2_enc, out3_enc, out4_enc, out5_enc, out6_enc):
+    def call (self, out_tgru, out1_enc, out2_enc, out3_enc, out4_enc, out5_enc, out6_enc):
         
         in1_dec = tf.concat([out6_enc,out_tgru],axis=-1)
         out1_dec = self.trcnn_1d_block1(in1_dec)
@@ -306,4 +300,8 @@ class TRUNet_Decoder(tf.keras.Model):
         out5_dec = self.trcnn_1d_block5(in5_dec)
         print(np.shape(out5_dec))
 
-        return out5_dec
+        in6_dec = tf.concat([out1_enc,out5_dec],axis=-1)
+        out6_dec = self.trcnn_1d_block5(in6_dec)
+        print(np.shape(out6_dec))
+
+        return out6_dec

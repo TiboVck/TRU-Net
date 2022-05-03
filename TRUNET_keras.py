@@ -1,3 +1,4 @@
+from cmath import pi
 from locale import ABDAY_1
 import tensorflow as tf
 import keras
@@ -5,6 +6,7 @@ import keras.layers as layers
 import keras.activations as activations
 import numpy as np
 import tensorflow_probability as tfp
+tfd = tfp.distributions
 
 import Blocks as bl
 import Utils as ut
@@ -50,7 +52,7 @@ https://wham.whisper.ai
 https://catalog.ldc.upenn.edu/LDC2017S10.
 
 
-
+input size : 19624192 x 80
 '''
 
 
@@ -58,9 +60,8 @@ https://catalog.ldc.upenn.edu/LDC2017S10.
 
 
         super().__init__()
-
-        
-
+#------------Parameters-------------------------------------------------------------------
+        self.dist = tfd.Gumbel(loc=0., scale=3.)
 #------------Encoder part----------------------------------------------------------------
         self.trunet_encoder = bl.TRUNet_Encoder(channels_in)
 
@@ -72,16 +73,18 @@ https://catalog.ldc.upenn.edu/LDC2017S10.
 
 #------------Decoder part------------------------------------------------------------------
         self.trunet_decoder= bl.TRUNet_Decoder(64)
+        self.trcnn_1d_block6 = bl.TrCNN_Block(10,5,2) # à mettre dans decoder part
         
-#------------Last Layer-------------------------------------------------------------------
-        #self.trcnn_1d_block6 = bl.TrCNN_Block(10,5,2)
-        self.psi_block_ztf = bl.Last_TrCNN_Block(5,5,2)
-        self.psi_block_beta  = bl.TrCNN_Block(5,5,2)
+#------------Last Layers-------------------------------------------------------------------
+        
+        self.block_z_tfk = bl.Last_Block(4,10,1)
+        self.block_beta_tf  = bl.Last_Block(4,10,1)
+        self.block_ksi_tf = bl.Last_Block(1,10,1)
 
 #------------Additional layer for ksi------------------------------------------------------
-        self.gumbel_sample = layers.Dense(1,use_bias=False)
+        self.learn_temp = layers.Dense(1,use_bias=False)
 
-
+        
 
 
     def call (self, input):
@@ -104,28 +107,30 @@ https://catalog.ldc.upenn.edu/LDC2017S10.
 
 #-------Decoder-----------------------------------------------------------------------------------
    
-        out5_dec = self.trunet_decoder(out_tgru, out2_enc, out3_enc, out4_enc, out5_enc, out6_enc)
-        print(np.shape(out5_dec))
+        phi = self.trunet_decoder(out_tgru, out2_enc, out3_enc, out4_enc, out5_enc, out6_enc)
+        print(np.shape(phi))
 
-#-------Last layer of the decoder-----------------------------------------------------------------
-        phi = tf.concat([out1_enc,out5_dec],axis=-1)
-        z_tf = self.psi_block_ztf(phi)
-        print(np.shape(z_tf))
+#-------Last layers to output beta, z, and ksi-----------------------------------------------------------------
+        
+        psi_beta = self.block_beta_tf(phi)
+        z_tf = self.block_z_tfk(phi)
+        pi_ksi = self.block_ksi_tf(phi)
 
 #-------Post-processing----------------------------------------------------------------------------
 
-        #Calcul sigma(ztf)
-        sigma_tf = ut.sigma(z_tf[:,:,:4])
+        #======Calcul sigma(ztf)============
+        sigma_tf = ut.sigma(z_tf)
 
         #psi_beta_tf = self.psi_block_beta(phi)
         #print(np.shape(beta_tf))
         
-        #Calcul BetaTF
-        beta_tf = ut.calcul_beta(z_tf[:,:,4])
+        #======Calcul BetaTF=================
+        beta_tf = ut.calcul_beta(psi_beta)
         print(np.shape(beta_tf))
-            #calcul des upperbound de clipping pour Beta
-        clip_d = tf.divide(1, tf.abs(sigma_tf[0]-sigma_tf[1]))
         
+        #Calcul des upperbound de clipping pour Beta
+
+        clip_d = tf.divide(1, tf.abs(sigma_tf[0]-sigma_tf[1]))
         clip_n = tf.divide(1, tf.abs(sigma_tf[2]-sigma_tf[3]))
 
         beta_tf_clip_d = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_d)
@@ -138,9 +143,20 @@ https://catalog.ldc.upenn.edu/LDC2017S10.
         mask_tfn = tf.multiply(beta_tf_clip_n, sigma_tf[2])
         mask_tfin = tf.multiply(beta_tf_clip_n, sigma_tf[3])
 
-        #Calcul des phases des masques 
-        alpha_tf1 = z_tf[:,:,5]
-        alpha_tfm1 = z_tf[:,:,6]
+        #Calcul de ksi
+        tirage_gumbel = tfd.Gumbel(loc=0., scale=1.)
+        g_tf = tirage_gumbel.sample(tf.shape(pi_ksi))
+
+        arg_exp_plus1 = self.learn_temp(tf.math.log(pi_ksi) + g_tf)
+        arg_exp_moins1 = self.learn_temp(tf.math.log(tf.ones(tf.shape(pi_ksi))-pi_ksi) + g_tf)
+
+
+        alpha_tf_plus1 = tf.math.exp(arg_exp_plus1)
+        alpha_tf_moins1 = tf.math.exp(arg_exp_moins1)
+        ksi_norm = alpha_tf_moins1 + alpha_tf_plus1
+
+        
+
 
 
         #first, delta theta
