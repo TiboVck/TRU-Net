@@ -3,6 +3,9 @@ import tensorflow as tf
 import keras.layers as layers
 import keras.activations as activations
 import numpy as np
+import Utils as ut
+import tensorflow_probability as tfp
+tfd = tfp.distributions
 
 
 # 1D-CNN Blocks for the encoder
@@ -210,7 +213,7 @@ class Last_Blocks(tf.keras.Model):
 
         output  = self.conv1d(x)
         
-        output = self.relu1(self.norm1(output))
+        output = self.relu(self.norm(output))
         
         print(np.shape(output))
        
@@ -299,9 +302,105 @@ class TRUNet_Decoder(tf.keras.Model):
         in5_dec = tf.concat([out2_enc,out4_dec],axis=-1)
         out5_dec = self.trcnn_1d_block5(in5_dec)
         print(np.shape(out5_dec))
+        print(np.shape(out1_enc))
 
         in6_dec = tf.concat([out1_enc,out5_dec],axis=-1)
-        out6_dec = self.trcnn_1d_block5(in6_dec)
+        out6_dec = self.trcnn_1d_block6(in6_dec)
         print(np.shape(out6_dec))
 
         return out6_dec
+
+# Blocks de post-processing
+# Calcul des masks à partir des sorties du dernier layer
+ 
+class Calcul_Mask(tf.keras.Model):
+    def __init__(self):
+
+
+        super().__init__()
+
+
+
+    def call (self, z_tf, psi_beta):
+        #======Calcul sigma(ztf)============
+        sigma_tf = ut.sigma(z_tf)
+
+        #psi_beta_tf = self.psi_block_beta(phi)
+        #print(np.shape(beta_tf))
+        
+        #======Calcul BetaTF=================
+        beta_tf = ut.calcul_beta(psi_beta)
+        print(np.shape(beta_tf))
+        
+        #Calcul des upperbound de clipping pour Beta
+
+        clip_d = tf.divide(1, tf.abs(sigma_tf[0]-sigma_tf[1]))
+        clip_n = tf.divide(1, tf.abs(sigma_tf[2]-sigma_tf[3]))
+
+        beta_tf_clip_d = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_d)
+        beta_tf_clip_n = tf.clip_by_value(beta_tf,tf.ones(tf.shape(beta_tf)),clip_n)
+
+        
+        #Calcul des masques (modules)
+        mask_tfd = tf.multiply(beta_tf_clip_d, sigma_tf[0])
+        mask_tfid = tf.multiply(beta_tf_clip_d, sigma_tf[1])
+        mask_tfn = tf.multiply(beta_tf_clip_n, sigma_tf[2])
+        mask_tfin = tf.multiply(beta_tf_clip_n, sigma_tf[3])
+
+        return mask_tfd, mask_tfid, mask_tfn, mask_tfin
+
+class Calcul_exp_stft(tf.keras.Model):
+    def __init__(self):
+
+
+        super().__init__()
+
+        #------------Additional layer for ksi------------------------------------------------------
+        self.learn_temp = layers.Dense(1,use_bias=False)
+
+
+        self.norm_cosinus = tf.keras.layers.BatchNormalization()
+
+    def call (pi_ksi,  mask_tfd, mask_tfid, mask_tfn, mask_tfin):
+
+        tirage_gumbel = tfd.Gumbel(loc=0., scale=1.)
+        g_tf = tirage_gumbel.sample(tf.shape(pi_ksi))
+
+        arg_exp_plus1 = self.learn_temp(tf.math.log(pi_ksi) + g_tf)
+        arg_exp_moins1 = self.learn_temp(tf.math.log(tf.ones(tf.shape(pi_ksi))-pi_ksi) + g_tf)
+
+
+        alpha_tf_plus1 = tf.math.exp(arg_exp_plus1)
+        alpha_tf_moins1 = tf.math.exp(arg_exp_moins1)
+        ksi_norm = alpha_tf_moins1 + alpha_tf_plus1
+        y_plus1 = tf.divide(alpha_tf_plus1,ksi_norm)
+        ksi_smooth = tf.multiply(2,y_plus1) - tf.one_hot(tf.shape(y_plus1))
+
+        #first, delta theta
+        cos_delta_theta_d = self.norm_cosinus(ut.calcul_theta(mask_tfd,mask_tfid))  
+        cos_delta_theta_id = self.norm_cosinus(ut.calcul_theta(mask_tfid,mask_tfd))  
+        cos_delta_theta_n = self.norm_cosinus(ut.calcul_theta(mask_tfn,mask_tfin))  
+        cos_delta_theta_in = self.norm_cosinus(ut.calcul_theta(mask_tfin,mask_tfn))  
+
+        delta_theta_d = tf.math.acos(cos_delta_theta_d)
+        delta_theta_id = tf.math.acos(cos_delta_theta_id)
+        delta_theta_n = tf.math.acos(cos_delta_theta_n)
+        delta_theta_in = tf.math.acos(cos_delta_theta_in)
+
+
+        #ensuite, calcul exp(j*theta) 
+
+        approx_theta_d = tf.multiply(ksi_smooth, delta_theta_d)
+        approx_theta_id = tf.multiply(ksi_smooth, delta_theta_id)
+        approx_theta_n = tf.multiply(ksi_smooth, delta_theta_n)
+        approx_theta_in = tf.multiply(ksi_smooth, delta_theta_in)
+
+        #Version smooth
+        exp_jtheta_d = tf.math.cos(approx_theta_d) + tf.multiply(1j,tf.math.sin(approx_theta_d))
+        exp_jtheta_id = tf.math.cos(approx_theta_id) + tf.multiply(1j,tf.math.sin(approx_theta_id))
+        exp_jtheta_n = tf.math.cos(approx_theta_n) + tf.multiply(1j,tf.math.sin(approx_theta_n))
+        exp_jtheta_in = tf.math.cos(approx_theta_n) + tf.multiply(1j,tf.math.sin(approx_theta_in))
+
+        return exp_jtheta_d, exp_jtheta_id, exp_jtheta_n, exp_jtheta_in
+
+

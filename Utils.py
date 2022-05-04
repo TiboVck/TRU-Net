@@ -6,7 +6,7 @@ import numpy as np
 
 
 def calcul_beta(psi_beta_tf):
-    return 1+tf.softplus(psi_beta_tf)
+    return 1+tf.math.softplus(psi_beta_tf)
 
 def sigma(psi_ztf):
     shape = tf.shape(psi_ztf)
